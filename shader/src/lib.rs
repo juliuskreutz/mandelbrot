@@ -1,17 +1,10 @@
-#![cfg_attr(
-    target_arch = "spirv",
-    no_std,
-    feature(register_attr, lang_items),
-    register_attr(spirv)
-)]
+#![cfg_attr(target_arch = "spirv", no_std)]
 #![deny(warnings)]
 
 use shared::Params;
-#[cfg(not(target_arch = "spirv"))]
 use spirv_std::macros::spirv;
 
 use spirv_std::glam::*;
-#[allow(unused_imports)]
 use spirv_std::num_traits::Float;
 
 #[spirv(vertex)]
@@ -36,7 +29,7 @@ pub fn main_fs(
 
     let r = pixel as f32 / params.iterations as f32;
     let g = (pixel * pixel) as f32 / (params.iterations * params.iterations) as f32;
-    let b = (pixel as f32).sqrt() / (params.iterations as f32).sqrt();
+    let b = Float::sqrt(pixel as f32) / Float::sqrt(params.iterations as f32);
 
     *output = vec4(r, g, b, 1.0);
 }
