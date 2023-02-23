@@ -1,6 +1,6 @@
 use std::{iter, mem};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use shared::{bytemuck, Params};
 use wgpu::util::DeviceExt;
 use winit::{
@@ -14,8 +14,11 @@ const VERTICES: &[[f32; 2]] = &[[-1.0, 1.0], [-1.0, -1.0], [1.0, -1.0], [1.0, 1.
 
 const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    pollster::block_on(run())
+}
+
+async fn run() -> Result<()> {
     let event_loop = EventLoop::new();
 
     let window = WindowBuilder::new()
@@ -25,8 +28,12 @@ async fn main() -> Result<()> {
         .build(&event_loop)?;
     let PhysicalSize { width, height } = window.inner_size();
 
-    let instance = wgpu::Instance::new(wgpu::Backends::all());
-    let surface = unsafe { instance.create_surface(&window) };
+    let instance_descriptor = wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        dx12_shader_compiler: wgpu::Dx12Compiler::default(),
+    };
+    let instance = wgpu::Instance::new(instance_descriptor);
+    let surface = unsafe { instance.create_surface(&window) }?;
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -35,7 +42,7 @@ async fn main() -> Result<()> {
             force_fallback_adapter: false,
         })
         .await
-        .unwrap();
+        .context("No adapter found")?;
 
     let features = wgpu::Features::PUSH_CONSTANTS | wgpu::Features::SHADER_FLOAT64;
     let limits = wgpu::Limits {
@@ -51,16 +58,17 @@ async fn main() -> Result<()> {
             },
             None,
         )
-        .await
-        .unwrap();
+        .await?;
 
+    let surface_capabilities = surface.get_capabilities(&adapter);
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface.get_supported_formats(&adapter)[0],
+        format: surface_capabilities.formats[0],
         width,
         height,
-        present_mode: wgpu::PresentMode::Fifo,
-        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        present_mode: surface_capabilities.present_modes[0],
+        alpha_mode: surface_capabilities.alpha_modes[0],
+        view_formats: vec![],
     };
     surface.configure(&device, &config);
 
