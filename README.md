@@ -10,4 +10,4 @@ A mandelbrot shader written completly in rust using [rust-gpu](https://github.co
 
 -   Left click (zoom in on that point)
 -   Right click (zoom out)
--   Esc (Close the window)
+-   Esc (close the window)
