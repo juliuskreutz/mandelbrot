@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = "0.28.1"
-anyhow = "1.0.66"
+winit = "0.28.2"
+anyhow = "1.0.69"
 pollster = "0.3.0"
 
 [dependencies.wgpu]
