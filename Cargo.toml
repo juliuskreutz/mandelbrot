@@ -1,10 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "mandelbrot",
-    "shader",
-    "shared",
-]
+members = ["mandelbrot", "shader", "shared"]
 
 [profile.release]
 incremental = true
@@ -15,5 +11,5 @@ opt-level = 3
 incremental = true
 codegen-units = 256
 
-[patch.crates-io]
-libm = { git = "https://github.com/rust-lang/libm", tag = "0.2.5" }
+# [patch.crates-io]
+# libm = { git = "https://github.com/rust-lang/libm", tag = "0.2.5" }

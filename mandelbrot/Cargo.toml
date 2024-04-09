@@ -6,16 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = "0.28.2"
-anyhow = "1.0.69"
+winit = "0.29.15"
+anyhow = "1.0.81"
 pollster = "0.3.0"
+wgpu = { version = "0.19.3", features = ["spirv"] }
+shared = { path = "../shared" }
 
-[dependencies.wgpu]
-version = "0.15.1"
-features = ["spirv"]
-
-[dependencies.shared]
-path = "../shared"
-
-[build-dependencies.spirv-builder]
-git = "https://github.com/EmbarkStudios/rust-gpu"
+[build-dependencies]
+spirv-builder = "0.9.0"

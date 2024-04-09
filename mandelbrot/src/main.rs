@@ -2,11 +2,12 @@ use std::{iter, mem};
 
 use anyhow::{Context, Result};
 use shared::{bytemuck, Params};
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, StoreOp};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event::{ElementState, Event, KeyEvent, MouseButton, WindowEvent},
+    event_loop::EventLoop,
+    keyboard::{KeyCode, PhysicalKey},
     window::{Fullscreen, WindowBuilder},
 };
 
@@ -19,7 +20,7 @@ fn main() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new()?;
 
     let window = WindowBuilder::new()
         .with_title("Mandelbrot")
@@ -28,12 +29,9 @@ async fn run() -> Result<()> {
         .build(&event_loop)?;
     let PhysicalSize { width, height } = window.inner_size();
 
-    let instance_descriptor = wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
-        dx12_shader_compiler: wgpu::Dx12Compiler::default(),
-    };
+    let instance_descriptor = wgpu::InstanceDescriptor::default();
     let instance = wgpu::Instance::new(instance_descriptor);
-    let surface = unsafe { instance.create_surface(&window) }?;
+    let surface = instance.create_surface(&window)?;
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -44,32 +42,23 @@ async fn run() -> Result<()> {
         .await
         .context("No adapter found")?;
 
-    let features = wgpu::Features::PUSH_CONSTANTS | wgpu::Features::SHADER_FLOAT64;
-    let limits = wgpu::Limits {
+    let required_features = wgpu::Features::PUSH_CONSTANTS | wgpu::Features::SHADER_F64;
+    let required_limits = wgpu::Limits {
         max_push_constant_size: 128,
         ..Default::default()
     };
     let (device, queue) = adapter
         .request_device(
             &wgpu::DeviceDescriptor {
-                features,
-                limits,
-                label: None,
+                required_features,
+                required_limits,
+                ..Default::default()
             },
             None,
         )
         .await?;
 
-    let surface_capabilities = surface.get_capabilities(&adapter);
-    let mut config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface_capabilities.formats[0],
-        width,
-        height,
-        present_mode: surface_capabilities.present_modes[0],
-        alpha_mode: surface_capabilities.alpha_modes[0],
-        view_formats: vec![],
-    };
+    let mut config = surface.get_default_config(&adapter, width, height).unwrap();
     surface.configure(&device, &config);
 
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -143,7 +132,7 @@ async fn run() -> Result<()> {
     let mut params = Params::new(width, height, 100);
     let (mut mouse_x, mut mouse_y) = (0., 0.);
 
-    event_loop.run(move |event, _, control_flow| match event {
+    event_loop.run(|event, control_flow| match event {
         Event::WindowEvent {
             ref event,
             window_id,
@@ -159,14 +148,14 @@ async fn run() -> Result<()> {
             }
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
+                event:
+                    KeyEvent {
                         state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        physical_key: PhysicalKey::Code(KeyCode::Escape),
                         ..
                     },
                 ..
-            } => *control_flow = ControlFlow::Exit,
+            } => control_flow.exit(),
             WindowEvent::CursorMoved {
                 position: PhysicalPosition { x, y },
                 ..
@@ -175,19 +164,19 @@ async fn run() -> Result<()> {
                 mouse_y = *y;
             }
             WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
+                event:
+                    KeyEvent {
                         state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Up),
+                        physical_key: PhysicalKey::Code(KeyCode::ArrowUp),
                         ..
                     },
                 ..
             } => params.iterations += 100,
             WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
+                event:
+                    KeyEvent {
                         state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Down),
+                        physical_key: PhysicalKey::Code(KeyCode::ArrowDown),
                         ..
                     },
                 ..
@@ -213,48 +202,49 @@ async fn run() -> Result<()> {
             } => {
                 params.zoom *= 2.0;
             }
+            WindowEvent::RedrawRequested => {
+                let output = surface.get_current_texture().unwrap();
+                let mut encoder =
+                    device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+                let view = output
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+
+                {
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: StoreOp::Store,
+                            },
+                        })],
+                        ..Default::default()
+                    });
+
+                    render_pass.set_pipeline(&render_pipeline);
+                    render_pass.set_push_constants(
+                        wgpu::ShaderStages::FRAGMENT,
+                        0,
+                        bytemuck::bytes_of(&params),
+                    );
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
+                }
+
+                queue.submit(iter::once(encoder.finish()));
+                output.present();
+            }
             _ => {}
         },
-        Event::RedrawRequested(window_id) if window_id == window.id() => {
-            let output = surface.get_current_texture().unwrap();
-            let mut encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-            let view = output
-                .texture
-                .create_view(&wgpu::TextureViewDescriptor::default());
-
-            {
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: true,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                });
-
-                render_pass.set_pipeline(&render_pipeline);
-                render_pass.set_push_constants(
-                    wgpu::ShaderStages::FRAGMENT,
-                    0,
-                    bytemuck::bytes_of(&params),
-                );
-                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
-            }
-
-            queue.submit(iter::once(encoder.finish()));
-            output.present();
-        }
-        Event::MainEventsCleared => {
+        Event::AboutToWait => {
             window.request_redraw();
         }
         _ => {}
-    });
+    })?;
+
+    Ok(())
 }

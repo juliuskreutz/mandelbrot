@@ -6,7 +6,7 @@ A mandelbrot shader written completly in rust using link:https://github.com/Emba
 
 == Running
 
-`cargo run` and the window will be displayed on your main window in fullscreen.
+`cargo run`
 
 == Controls
 
