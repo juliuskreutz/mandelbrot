@@ -1,0 +1,29 @@
+:experimental:
+
+= mandelbrot
+
+A mandelbrot shader written completly in rust using link:https://github.com/EmbarkStudios/rust-gpu[rust-gpu] and link:https://github.com/gfx-rs/wgpu[wgpu].
+
+== Running
+
+`cargo run` and the window will be displayed on your main window in fullscreen.
+
+== Controls
+
+|===
+|Key |Action
+
+|kbd:[Esc]
+|Exit
+
+|kbd:[MouseLeft]
+|Zoom in
+
+|kbd:[MouseRight]
+|Zoom out
+
+|kbd:[ArrowUp]
+|Increase mandelbrot depth
+
+|kbd:[ArrowDown]
+|Increase mandelbrot depth
